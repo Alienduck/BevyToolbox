@@ -8,7 +8,11 @@ fn main() {
         .run();
 }
 
-fn startup(mut commands: Commands) {
+fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        SceneRoot(asset_server.load("models/DingusTheCat.glb")),
+        Transform::default(),
+    ));
     let player = commands.spawn(Transform::default()).id();
     commands.spawn((
         Camera::default(),
