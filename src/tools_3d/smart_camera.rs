@@ -14,7 +14,7 @@ pub enum CameraMode {
 pub struct SmartCamera {
     /// The entity which the camera will follow, else it will be disable
     pub camera_subject: Option<Entity>,
-    /// The camera mode, see CameraMode
+    /// The camera mode, see [`CameraMode`]
     pub mode: CameraMode,
     /// Distance between camera and followed entity (when CameraMode is on ThirdPerson)
     pub distance: f32,
@@ -45,7 +45,7 @@ impl Plugin for SmartCameraPlugin {
 
 fn update_smart_camera(
     mut camera_query: Query<(&SmartCamera, &mut Transform)>,
-    transforms_query: Query<&Transform>,
+    transforms_query: Query<&Transform, Without<SmartCamera>>,
 ) {
     let Ok(camera) = camera_query.single_mut() else {
         return;
