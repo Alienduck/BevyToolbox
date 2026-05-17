@@ -1,0 +1,12 @@
+[package]
+name = "bevy_toolbox"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["2d", "3d"]
+tools_2d = []
+tools_3d = []
+
+[dependencies]
+bevy = "0.18.1"
