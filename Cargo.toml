@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["2d", "3d"]
+default = ["tools_2d", "tools_3d"]
 tools_2d = []
 tools_3d = []
 
