@@ -9,4 +9,4 @@ tools_2d = []
 tools_3d = []
 
 [dependencies]
-bevy = "0.18.1"
+bevy = { version = "0.18.1", features = ["jpeg"] }
