@@ -10,7 +10,11 @@ fn main() {
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
-        SceneRoot(asset_server.load("models/DingusTheCat.glb")),
+        DirectionalLight::default(),
+        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/DingusTheCat.glb#Scene0")),
         Transform::default(),
     ));
     let player = commands.spawn(Transform::default()).id();
