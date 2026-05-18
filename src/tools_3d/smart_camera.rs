@@ -1,4 +1,6 @@
-use bevy::prelude::*;
+use std::f32::consts::FRAC_PI_2;
+
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
 /// Different camera modes
 /// TODO: add SecondPerson (follow)
@@ -7,6 +9,13 @@ pub enum CameraMode {
     FirstPerson,
     #[default]
     ThirdPerson,
+}
+
+/// Enum to take inputs from keyboard and mouse
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CameraInput {
+    Keyboard(KeyCode),
+    Mouse(MouseButton),
 }
 
 /// The smart camera is based on the roblox's camera
@@ -18,10 +27,20 @@ pub struct SmartCamera {
     pub mode: CameraMode,
     /// Distance between camera and followed entity (when CameraMode is on ThirdPerson)
     pub distance: f32,
+    /// The mouse motion sensitivity
+    pub sensitivity: f32,
     /// Vertical angle (up/down)
     pub pitch: f32,
     /// Horizontal angle (left/right)
     pub yaw: f32,
+    /// The field of view of the camera
+    pub fov: f32,
+    /// When set to true, the motion will be apply only if right click or custom input is press
+    pub motion_on_input: bool,
+    /// The custom input for *motion_on_input*
+    pub custom_input: Option<CameraInput>,
+    /// When camera in first person, apply on offset to go into the head
+    pub first_person_offset: Vec3,
 }
 
 impl Default for SmartCamera {
@@ -30,8 +49,13 @@ impl Default for SmartCamera {
             camera_subject: None,
             mode: CameraMode::ThirdPerson,
             distance: 5.0,
+            sensitivity: 1.0,
             pitch: 0.0,
             yaw: 0.0,
+            fov: 70.0,
+            motion_on_input: false,
+            custom_input: None,
+            first_person_offset: Vec3::new(0.0, 1.5, 0.0),
         }
     }
 }
@@ -39,19 +63,23 @@ pub struct SmartCameraPlugin;
 
 impl Plugin for SmartCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, update_smart_camera);
+        app.add_systems(PostUpdate, update_smart_camera)
+            .add_systems(Update, (camera_mouse_control).chain());
     }
 }
 
 fn update_smart_camera(
-    mut camera_query: Query<(&SmartCamera, &mut Transform)>,
+    mut camera_query: Query<(&SmartCamera, &mut Transform, &mut Projection)>,
     transforms_query: Query<&Transform, Without<SmartCamera>>,
 ) {
-    let Ok(camera) = camera_query.single_mut() else {
+    let Ok((smart_camera, mut camera_transform, mut projection)) = camera_query.single_mut() else {
         return;
     };
-    let smart_camera = camera.0;
-    let mut camera_transform = camera.1;
+    if let Projection::Perspective(ref mut perspective) = *projection {
+        if perspective.fov != smart_camera.fov {
+            perspective.fov = smart_camera.fov;
+        }
+    }
     if let Some(target_entity) = smart_camera.camera_subject {
         if let Ok(target_transform) = transforms_query.get(target_entity) {
             let rotation =
@@ -64,10 +92,78 @@ fn update_smart_camera(
                 }
                 CameraMode::FirstPerson => {
                     camera_transform.translation =
-                        target_transform.translation + Vec3::new(0.0, 1.5, 0.0);
+                        target_transform.translation + smart_camera.first_person_offset;
                 }
             }
             camera_transform.rotation = rotation;
         }
+    }
+}
+
+fn camera_mouse_control(
+    mut motion_evr: MessageReader<MouseMotion>,
+    mut query: Query<&mut SmartCamera>,
+    mouse_inputs: Res<ButtonInput<MouseButton>>,
+    key_inputs: Res<ButtonInput<KeyCode>>,
+) {
+    let Ok(mut smart_camera) = query.single_mut() else {
+        return;
+    };
+
+    if smart_camera.motion_on_input {
+        let is_pressed = match smart_camera.custom_input {
+            Some(CameraInput::Keyboard(keycode)) => key_inputs.pressed(keycode),
+            Some(CameraInput::Mouse(mouse_button)) => mouse_inputs.pressed(mouse_button),
+            None => mouse_inputs.pressed(MouseButton::Right),
+        };
+
+        if !is_pressed {
+            motion_evr.clear();
+            return;
+        }
+    }
+
+    let mut mouse_delta = Vec2::ZERO;
+    for msg in motion_evr.read() {
+        mouse_delta += msg.delta;
+    }
+
+    if mouse_delta != Vec2::ZERO {
+        let sensitivity = smart_camera.sensitivity * 0.01;
+        smart_camera.yaw -= mouse_delta.x * sensitivity;
+        smart_camera.pitch -= mouse_delta.y * sensitivity;
+        smart_camera.pitch = smart_camera
+            .pitch
+            .clamp(-FRAC_PI_2 + 0.01, FRAC_PI_2 - 0.01);
+    }
+}
+
+/// Take a position in the map.\
+/// Return a Vec3 where X and Y are the screen position of the given position and Z is the distance between camera and the given position.\
+/// Return also a bool which is true when the givben position is on screen
+pub fn world_to_screen_point(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    target: Vec3,
+) -> (Vec3, bool) {
+    let distance = camera_transform.translation().distance(target);
+
+    match camera.world_to_viewport(camera_transform, target) {
+        Ok(screen_pos) => {
+            let mut is_on_screen = false;
+
+            if let Some(viewport_size) = camera.logical_viewport_size() {
+                is_on_screen = screen_pos.x >= 0.0
+                    && screen_pos.x <= viewport_size.x
+                    && screen_pos.y >= 0.0
+                    && screen_pos.y <= viewport_size.y;
+            }
+
+            (
+                Vec3::new(screen_pos.x, screen_pos.y, distance),
+                is_on_screen,
+            )
+        }
+        Err(_) => (Vec3::new(0.0, 0.0, distance), false),
     }
 }
