@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{input::mouse::MouseWheel, prelude::*};
 use bevy_toolbox::tools_3d::smart_camera::{
     CameraInput, CameraMode, SmartCamera, SmartCameraPlugin, world_to_screen_point,
 };
@@ -7,7 +7,16 @@ fn main() {
     let mut app = App::default();
     app.add_plugins((DefaultPlugins, SmartCameraPlugin))
         .add_systems(Startup, startup)
-        .add_systems(Update, (player_move, toggle_camera_mode, update_point))
+        .add_systems(
+            Update,
+            (
+                player_move,
+                toggle_camera_mode,
+                update_point,
+                change_camera_distance,
+                rotate,
+            ),
+        )
         .run();
 }
 
@@ -47,7 +56,7 @@ fn startup(
         .spawn((
             Transform::default(),
             Player::default(),
-            Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+            Mesh3d(meshes.add(Capsule3d::new(0.5, 1.0))),
             MeshMaterial3d(materials.add(Color::WHITE)),
         ))
         .id();
@@ -67,20 +76,36 @@ fn startup(
         Node {
             top: Val::Percent(50.0),
             left: Val::Percent(50.0),
-            width: Val::Px(5.0),
-            height: Val::Px(5.0),
+            padding: UiRect::all(Val::Px(15.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
             border_radius: BorderRadius::all(Val::Percent(100.0)),
             ..default()
         },
         BackgroundColor(Color::Srgba(Srgba {
-            red: 1.0,
+            red: 0.0,
             green: 0.0,
             blue: 0.0,
-            alpha: 1.0,
+            alpha: 0.25,
         })),
         Visibility::Inherited,
         ScreenPoint,
+        children![(
+            Text("Ce fdp de Willi wonka".into()),
+            TextFont {
+                font_size: 24.0,
+                ..default()
+            }
+        )],
     ));
+}
+
+fn rotate(mut maxwell_query: Query<&mut Transform, With<Maxwell>>, time: Res<Time>) {
+    let Ok(mut transform) = maxwell_query.single_mut() else {
+        return;
+    };
+    let speed = 1231351.0;
+    transform.rotate_y(speed * time.delta_secs());
 }
 
 fn player_move(
@@ -140,6 +165,7 @@ fn update_point(
     mut point_query: Query<(&mut Node, &mut Visibility), With<ScreenPoint>>,
     camera_query: Query<(&GlobalTransform, &Camera), With<SmartCamera>>,
     maxwell_query: Query<&Transform, With<Maxwell>>,
+    window_query: Query<&Window>,
 ) {
     let Ok((mut point, mut visibility)) = point_query.single_mut() else {
         return;
@@ -150,14 +176,33 @@ fn update_point(
     let Ok(maxwell_transform) = maxwell_query.single() else {
         return;
     };
+    let Ok(window) = window_query.single() else {
+        return;
+    };
     let (vector, on_screen) =
         world_to_screen_point(camera, camera_transform, maxwell_transform.translation);
 
     if on_screen {
         *visibility = Visibility::Visible;
-        point.left = Val::Px(vector.x);
+        if vector.x < window.width() / 2_f32 {
+            point.left = Val::Px(vector.x);
+        } else {
+            point.right = Val::Px(vector.x);
+        }
         point.top = Val::Px(vector.y);
     } else {
         *visibility = Visibility::Hidden;
+    }
+}
+
+fn change_camera_distance(
+    mut camera_query: Query<&mut SmartCamera>,
+    mut mouse_motion: MessageReader<MouseWheel>,
+) {
+    let Ok(mut camera) = camera_query.single_mut() else {
+        return;
+    };
+    for msg in mouse_motion.read() {
+        camera.distance -= msg.y * 0.25;
     }
 }
