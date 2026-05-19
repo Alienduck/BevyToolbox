@@ -163,7 +163,7 @@ fn lock_mouse(
     let is_pressed = match camera.custom_mouse_lock_input {
         Some(CameraInput::Keyboard(keycode)) => key_inputs.pressed(keycode),
         Some(CameraInput::Mouse(mouse_button)) => mouse_inputs.pressed(mouse_button),
-        None => mouse_inputs.pressed(MouseButton::Right),
+        None => key_inputs.pressed(KeyCode::ShiftLeft),
     };
 
     if is_pressed {
