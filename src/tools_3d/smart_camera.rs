@@ -1,6 +1,10 @@
 use std::f32::consts::FRAC_PI_2;
 
-use bevy::{input::mouse::MouseMotion, prelude::*};
+use bevy::{
+    input::mouse::MouseMotion,
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions},
+};
 
 /// Different camera modes
 /// TODO: add SecondPerson (follow)
@@ -35,6 +39,12 @@ pub struct SmartCamera {
     pub yaw: f32,
     /// The field of view of the camera
     pub fov: f32,
+    /// Is the mouse lock behavior active ?
+    pub mouse_lock_enabled: bool,
+    /// When Shift or desire input pressed, the mouse is locked
+    pub mouse_lock: bool,
+    /// Custom input for mouse lock
+    pub custom_mouse_lock_input: Option<CameraInput>,
     /// When set to true, the motion will be apply only if right click or custom input is press
     pub motion_on_input: bool,
     /// The custom input for *motion_on_input*
@@ -53,6 +63,9 @@ impl Default for SmartCamera {
             pitch: 0.0,
             yaw: 0.0,
             fov: 70.0,
+            mouse_lock_enabled: false,
+            mouse_lock: false,
+            custom_mouse_lock_input: None,
             motion_on_input: false,
             custom_input: None,
             first_person_offset: Vec3::new(0.0, 1.5, 0.0),
@@ -64,7 +77,7 @@ pub struct SmartCameraPlugin;
 impl Plugin for SmartCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostUpdate, update_smart_camera)
-            .add_systems(Update, (camera_mouse_control).chain());
+            .add_systems(Update, (camera_mouse_control, lock_mouse).chain());
     }
 }
 
@@ -135,6 +148,33 @@ fn camera_mouse_control(
         smart_camera.pitch = smart_camera
             .pitch
             .clamp(-FRAC_PI_2 + 0.01, FRAC_PI_2 - 0.01);
+    }
+}
+
+fn lock_mouse(
+    mut camera_query: Query<&mut SmartCamera>,
+    mut cursor: Single<&mut CursorOptions>,
+    key_inputs: Res<ButtonInput<KeyCode>>,
+    mouse_inputs: Res<ButtonInput<MouseButton>>,
+) {
+    let Ok(mut camera) = camera_query.single_mut() else {
+        return;
+    };
+    let is_pressed = match camera.custom_mouse_lock_input {
+        Some(CameraInput::Keyboard(keycode)) => key_inputs.pressed(keycode),
+        Some(CameraInput::Mouse(mouse_button)) => mouse_inputs.pressed(mouse_button),
+        None => mouse_inputs.pressed(MouseButton::Right),
+    };
+
+    if is_pressed {
+        if camera.mouse_lock {
+            cursor.grab_mode = CursorGrabMode::None;
+            cursor.visible = true;
+        } else {
+            cursor.visible = false;
+            cursor.grab_mode = CursorGrabMode::Locked;
+        }
+        camera.mouse_lock = !camera.mouse_lock;
     }
 }
 
