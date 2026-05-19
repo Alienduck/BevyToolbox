@@ -71,6 +71,7 @@ fn startup(
             mode: CameraMode::ThirdPerson,
             motion_on_input: false,
             custom_input: Some(CameraInput::Mouse(MouseButton::Back)),
+            mouse_lock_enabled: true,
             ..default()
         },
     ));
