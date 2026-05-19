@@ -7,20 +7,25 @@ fn main() {
     let mut app = App::default();
     app.add_plugins((DefaultPlugins, SmartCameraPlugin))
         .add_systems(Startup, startup)
-        .add_systems(Update, (player_move, toggle_camera_mode, update_point))
+        .add_systems(
+            Update,
+            (player_move, toggle_camera_mode, update_point, rotating),
+        )
         .run();
-}
-
-#[derive(Component)]
-struct Player {
-    speed: f32,
 }
 
 #[derive(Component)]
 struct ScreenPoint;
 
 #[derive(Component)]
-struct Maxwell;
+struct Maxwell {
+    is_rotating: bool,
+}
+
+#[derive(Component)]
+struct Player {
+    speed: f32,
+}
 
 impl Default for Player {
     fn default() -> Self {
@@ -41,7 +46,7 @@ fn startup(
     commands.spawn((
         SceneRoot(asset_server.load("models/DingusTheCat.glb#Scene0")),
         Transform::default(),
-        Maxwell,
+        Maxwell { is_rotating: false },
     ));
     let player = commands
         .spawn((
@@ -81,6 +86,22 @@ fn startup(
         Visibility::Inherited,
         ScreenPoint,
     ));
+}
+
+fn rotating(
+    mut maxwell_query: Query<(&mut Transform, &mut Maxwell)>,
+    inputs: Res<ButtonInput<KeyCode>>,
+    delta: Res<Time>,
+) {
+    let Ok((mut transform, mut maxwell)) = maxwell_query.single_mut() else {
+        return;
+    };
+    if inputs.just_pressed(KeyCode::KeyQ) {
+        maxwell.is_rotating = !maxwell.is_rotating;
+    }
+    if maxwell.is_rotating {
+        transform.rotate_y(561651.0 * delta.delta_secs());
+    }
 }
 
 fn player_move(
