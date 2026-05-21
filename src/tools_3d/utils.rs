@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub enum EasingStyle {
     #[default]
     Linear,
@@ -14,7 +14,7 @@ pub enum EasingStyle {
     Elastic,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub enum EasingDirection {
     #[default]
     In,
