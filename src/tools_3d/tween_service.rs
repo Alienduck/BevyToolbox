@@ -1,13 +1,31 @@
-use bevy::{ecs::component::Mutable, prelude::*};
-
+// tween_service.rs
 use crate::tools_3d::utils::{EasingDirection, EasingStyle};
+use bevy::{ecs::component::Mutable, math::VectorSpace, prelude::*};
 
 pub struct TweenPlugin;
 
 impl Plugin for TweenPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TweenService>()
-            .add_systems(Update, tween_update_system::<TweenFloat>);
+        app.init_resource::<TweenService>();
+        // Transform is always registered — it's the most common case
+        app.register_tween::<Transform>();
+    }
+}
+
+// Extension trait: lets users call app.register_tween::<T>() for any Tweenable
+pub trait TweenAppExt {
+    fn register_tween<T>(&mut self) -> &mut Self
+    where
+        T: Tweenable + Component + Clone + Component<Mutability = Mutable>;
+}
+
+impl TweenAppExt for App {
+    fn register_tween<T>(&mut self) -> &mut Self
+    where
+        T: Tweenable + Component + Clone + Component<Mutability = Mutable>,
+    {
+        self.add_systems(Update, tween_update_system::<T>);
+        self
     }
 }
 
@@ -15,23 +33,19 @@ impl Plugin for TweenPlugin {
 pub struct TweenService;
 
 impl TweenService {
-    pub fn create<T: Tweenable>(value: T, tween_info: TweenInfo, goal: T) -> Tween<T> {
-        Tween::new(value, goal, tween_info)
+    pub fn create<T: Tweenable + Clone>(tween_info: TweenInfo, goal: T) -> Tween<T> {
+        Tween::new(goal, tween_info)
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TweenInfo {
-    /// Duration of the tween in seconds
     pub duration: f32,
-    /// The style of the tween execution
     pub easing_style: EasingStyle,
-    /// The direction of the tween execution
     pub easing_direction: EasingDirection,
-    /// Number of the tween's repetition
+    /// -1 = infinite, 0 = play once, N = repeat N times
     pub repeat_count: i32,
-    /// If the tween need to play back when it's finished
     pub reverses: bool,
-    /// The time before the tween starts
     pub delay_time: f32,
 }
 
@@ -48,46 +62,36 @@ impl Default for TweenInfo {
     }
 }
 
-pub trait Tweenable {
+pub trait Tweenable: Sized + Send + Sync + 'static {
     fn tween(start: Self, end: Self, a: f32) -> Self;
 }
 
-impl Tweenable for f64 {
+impl Tweenable for Transform {
     fn tween(start: Self, end: Self, a: f32) -> Self {
-        start + (end - start) * a as f64
+        Transform {
+            translation: start.translation.lerp(end.translation, a),
+            rotation: start.rotation.slerp(end.rotation, a),
+            scale: start.scale.lerp(end.scale, a),
+        }
     }
 }
 
-#[derive(Component, Clone, Copy)]
-pub struct TweenFloat(pub f32);
-
-impl Tweenable for TweenFloat {
+impl Tweenable for Color {
     fn tween(start: Self, end: Self, a: f32) -> Self {
-        Self(start.0 + (end.0 - start.0) * a)
+        start.to_srgba().lerp(end.to_srgba(), a).into()
     }
 }
 
-impl Tweenable for i128 {
+impl Tweenable for Sprite {
     fn tween(start: Self, end: Self, a: f32) -> Self {
-        (start as f32 + ((end - start) as f32 * a)) as i128
-    }
-}
-
-impl Tweenable for i64 {
-    fn tween(start: Self, end: Self, a: f32) -> Self {
-        (start as f32 + ((end - start) as f32 * a)) as i64
-    }
-}
-
-impl Tweenable for i32 {
-    fn tween(start: Self, end: Self, a: f32) -> Self {
-        (start as f32 + ((end - start) as f32 * a)) as i32
-    }
-}
-
-impl Tweenable for i16 {
-    fn tween(start: Self, end: Self, a: f32) -> Self {
-        (start as f32 + ((end - start) as f32 * a)) as i16
+        Sprite {
+            color: Color::tween(start.color, end.color, a),
+            custom_size: match (start.custom_size, end.custom_size) {
+                (Some(s), Some(e)) => Some(s.lerp(e, a)),
+                _ => start.custom_size,
+            },
+            ..start
+        }
     }
 }
 
@@ -102,8 +106,8 @@ pub enum PlaybackState {
 }
 
 #[derive(Component)]
-pub struct Tween<T: Tweenable> {
-    pub start: T,
+pub struct Tween<T: Tweenable + Clone> {
+    pub start: Option<T>,
     pub goal: T,
     pub info: TweenInfo,
     pub state: PlaybackState,
@@ -113,18 +117,17 @@ pub struct Tween<T: Tweenable> {
     pub is_reversing: bool,
 }
 
-impl<T: Tweenable> Tween<T> {
-    pub fn new(start: T, goal: T, info: TweenInfo) -> Self {
-        let state = if info.delay_time > 0.0 {
-            PlaybackState::Delayed
-        } else {
-            PlaybackState::Playing
-        };
+impl<T: Tweenable + Clone> Tween<T> {
+    pub fn new(goal: T, info: TweenInfo) -> Self {
         Self {
-            start,
+            state: if info.delay_time > 0.0 {
+                PlaybackState::Delayed
+            } else {
+                PlaybackState::Playing
+            },
+            start: None,
             goal,
             info,
-            state,
             elapsed: 0.0,
             delay_elapsed: 0.0,
             repetitions: 0,
@@ -133,21 +136,24 @@ impl<T: Tweenable> Tween<T> {
     }
 
     pub fn play(&mut self) {
-        if self.state == PlaybackState::Completed || self.state == PlaybackState::Cancelled {
+        if matches!(
+            self.state,
+            PlaybackState::Completed | PlaybackState::Cancelled
+        ) {
             self.elapsed = 0.0;
             self.delay_elapsed = 0.0;
             self.repetitions = 0;
             self.is_reversing = false;
         }
-        if self.delay_elapsed < self.info.delay_time {
-            self.state = PlaybackState::Delayed;
+        self.state = if self.delay_elapsed < self.info.delay_time {
+            PlaybackState::Delayed
         } else {
-            self.state = PlaybackState::Playing;
-        }
+            PlaybackState::Playing
+        };
     }
 
     pub fn pause(&mut self) {
-        if self.state == PlaybackState::Playing || self.state == PlaybackState::Delayed {
+        if matches!(self.state, PlaybackState::Playing | PlaybackState::Delayed) {
             self.state = PlaybackState::Paused;
         }
     }
@@ -158,45 +164,58 @@ impl<T: Tweenable> Tween<T> {
 }
 
 fn apply_easing(a: f32, _style: &EasingStyle, _dir: &EasingDirection) -> f32 {
-    a // TODO: Math logic
+    // TODO: implement easing curves
+    a
 }
 
 pub fn tween_update_system<T>(time: Res<Time>, mut query: Query<(&mut T, &mut Tween<T>)>)
 where
-    T: Tweenable + Component + Copy + Component<Mutability = Mutable>,
+    T: Tweenable + Component + Clone + Component<Mutability = Mutable>,
 {
     let dt = time.delta_secs();
+
     for (mut value, mut tween) in query.iter_mut() {
-        if tween.state == PlaybackState::Delayed {
-            tween.delay_elapsed += dt;
-            if tween.delay_elapsed >= tween.info.delay_time {
-                tween.state = PlaybackState::Playing;
+        match tween.state {
+            PlaybackState::Delayed => {
+                tween.delay_elapsed += dt;
+                if tween.delay_elapsed >= tween.info.delay_time {
+                    tween.state = PlaybackState::Playing;
+                }
+                continue;
             }
-            continue;
+            PlaybackState::Playing => {}
+            _ => continue,
         }
-        if tween.state != PlaybackState::Playing {
-            continue;
+
+        // Capture start value lazily on first frame
+        if tween.start.is_none() {
+            tween.start = Some((*value).clone());
         }
+
         if tween.is_reversing {
             tween.elapsed -= dt;
         } else {
             tween.elapsed += dt;
         }
-        let mut raw_ratio = tween.elapsed / tween.info.duration;
-        let mut cycle_finished = false;
-        if !tween.is_reversing && raw_ratio >= 1.0 {
-            raw_ratio = 1.0;
-            cycle_finished = true;
-        } else if tween.is_reversing && raw_ratio <= 0.0 {
-            raw_ratio = 0.0;
-            cycle_finished = true;
-        }
-        let eased_ratio = apply_easing(
+
+        let raw_ratio = (tween.elapsed / tween.info.duration).clamp(0.0, 1.0);
+        let cycle_finished = if tween.is_reversing {
+            tween.elapsed <= 0.0
+        } else {
+            tween.elapsed >= tween.info.duration
+        };
+
+        let eased = apply_easing(
             raw_ratio,
             &tween.info.easing_style,
             &tween.info.easing_direction,
         );
-        *value = T::tween(tween.start, tween.goal, eased_ratio);
+        *value = T::tween(
+            tween.start.as_ref().unwrap().clone(),
+            tween.goal.clone(),
+            eased,
+        );
+
         if cycle_finished {
             if tween.info.reverses && !tween.is_reversing {
                 tween.is_reversing = true;
