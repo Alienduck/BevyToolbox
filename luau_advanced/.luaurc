@@ -1,0 +1,10 @@
+{
+  "languageMode": "strict",
+  "lint": { "*": true },
+  "lintErrors": false,
+  "typeErrors": true,
+  "globals": ["warn", "bevy_rust_api"],
+  "aliases": {
+    "bevy_rust_api": "./luau_advanced/bevy_rust_api.d"
+  }
+}
