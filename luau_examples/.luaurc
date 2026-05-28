@@ -1,14 +1,10 @@
 {
   "languageMode": "strict",
-  "lint": {
-    "*": true
-  },
+  "lint": { "*": true },
   "lintErrors": false,
   "typeErrors": true,
-  "globals": [
-    "warn"
-  ],
+  "globals": ["warn", "rust_api"],
   "aliases": {
-    "rust_api": "./",
+    "rust_api": "./luau_examples/rust_api.d"
   }
 }

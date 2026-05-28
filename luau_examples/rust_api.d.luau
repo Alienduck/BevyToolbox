@@ -1,7 +1,6 @@
-local rust_api = {}
+export type RustApi = {
+    add: (a: number, b: number) -> number,
+}
 
-rust_api.add = function (a: number, b: number): number
-    return a + b
-end
-
+local rust_api: RustApi = {} :: RustApi
 return rust_api
