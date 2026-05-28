@@ -37,7 +37,6 @@ fn setup(mut commands: Commands) {
             info,
             Sprite {
                 color: Color::srgb(0.2, 1.0, 0.2),
-                custom_size: Some(Vec2::new(100.0, 100.0)),
                 ..default()
             },
         ),

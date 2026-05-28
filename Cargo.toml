@@ -10,3 +10,4 @@ tools_3d = []
 
 [dependencies]
 bevy = { version = "0.18.1", features = ["jpeg"] }
+mlua = { version = "0.11.6", features = ["luau"] }

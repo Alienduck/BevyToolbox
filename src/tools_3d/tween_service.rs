@@ -1,4 +1,5 @@
-// tween_service.rs
+use std::fmt::Debug;
+
 use crate::tools_3d::utils::{EasingDirection, EasingStyle};
 use bevy::{ecs::component::Mutable, math::VectorSpace, prelude::*};
 
@@ -7,12 +8,10 @@ pub struct TweenPlugin;
 impl Plugin for TweenPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TweenService>();
-        // Transform is always registered — it's the most common case
         app.register_tween::<Transform>();
     }
 }
 
-// Extension trait: lets users call app.register_tween::<T>() for any Tweenable
 pub trait TweenAppExt {
     fn register_tween<T>(&mut self) -> &mut Self
     where
