@@ -33,7 +33,7 @@ fn main() {
         .insert_non_send_resource(LuaRuntime(lua))
         .insert_non_send_resource(scheduler)
         .add_systems(Startup, startup)
-        .add_systems(Update, (tick_scheduler, process_lua_queue))
+        .add_systems(Update, (tick_scheduler, process_lua_queue).chain())
         .run();
 }
 
