@@ -1,4 +1,3 @@
-// src/lua_bridge.rs
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::{
@@ -43,16 +42,13 @@ pub struct LuaQueue(pub Arc<Mutex<Vec<LuaCommand>>>);
 #[derive(Resource, Default)]
 pub struct HandleMap(pub HashMap<u64, (Entity, Handle<StandardMaterial>)>);
 
-pub fn process_lua_queue(
-    mut commands: Commands,
-    queue: Res<LuaQueue>,
-    mut handle_map: ResMut<HandleMap>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut transforms: Query<&mut Transform>,
-) {
-    let mut q = queue.0.lock().unwrap();
-    for cmd in q.drain(..) {
+pub fn process_lua_queue(world: &mut World) {
+    let queue = world.resource::<LuaQueue>().0.clone();
+    let mut q = queue.lock().unwrap();
+    let commands: Vec<LuaCommand> = q.drain(..).collect();
+    drop(q);
+
+    for cmd in commands {
         match cmd {
             LuaCommand::SpawnPart {
                 handle,
@@ -60,40 +56,67 @@ pub fn process_lua_queue(
                 size,
                 color,
             } => {
-                let mat = materials.add(color);
-                let entity = commands
+                let mat = world.resource_mut::<Assets<StandardMaterial>>().add(color);
+                let mesh = world
+                    .resource_mut::<Assets<Mesh>>()
+                    .add(Cuboid::new(size.x, size.y, size.z));
+
+                let entity = world
                     .spawn((
-                        Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
+                        Mesh3d(mesh),
                         MeshMaterial3d(mat.clone()),
                         Transform::from_translation(position),
                     ))
                     .id();
-                handle_map.0.insert(handle, (entity, mat));
+
+                world
+                    .resource_mut::<HandleMap>()
+                    .0
+                    .insert(handle, (entity, mat));
             }
             LuaCommand::SetPosition { handle, value } => {
-                if let Some(&(entity, _)) = handle_map.0.get(&handle) {
-                    if let Ok(mut t) = transforms.get_mut(entity) {
+                let entity = world
+                    .resource::<HandleMap>()
+                    .0
+                    .get(&handle)
+                    .map(|&(e, _)| e);
+                if let Some(entity) = entity {
+                    if let Some(mut t) = world.get_mut::<Transform>(entity) {
                         t.translation = value;
                     }
                 }
             }
             LuaCommand::SetSize { handle, value } => {
-                if let Some(&(entity, _)) = handle_map.0.get(&handle) {
-                    if let Ok(mut t) = transforms.get_mut(entity) {
+                let entity = world
+                    .resource::<HandleMap>()
+                    .0
+                    .get(&handle)
+                    .map(|&(e, _)| e);
+                if let Some(entity) = entity {
+                    if let Some(mut t) = world.get_mut::<Transform>(entity) {
                         t.scale = value;
                     }
                 }
             }
             LuaCommand::SetColor { handle, r, g, b } => {
-                if let Some((_, mat_handle)) = handle_map.0.get(&handle) {
-                    if let Some(mat) = materials.get_mut(mat_handle) {
+                let mat_handle = world
+                    .resource::<HandleMap>()
+                    .0
+                    .get(&handle)
+                    .map(|(_, m)| m.clone());
+                if let Some(mat_handle) = mat_handle {
+                    if let Some(mat) = world
+                        .resource_mut::<Assets<StandardMaterial>>()
+                        .get_mut(&mat_handle)
+                    {
                         mat.base_color = Color::srgb(r, g, b);
                     }
                 }
             }
             LuaCommand::Despawn { handle } => {
-                if let Some((entity, _)) = handle_map.0.remove(&handle) {
-                    commands.entity(entity).despawn();
+                let entry = world.resource_mut::<HandleMap>().0.remove(&handle);
+                if let Some((entity, _)) = entry {
+                    world.despawn(entity);
                 }
             }
         }
