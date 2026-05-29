@@ -1,22 +1,30 @@
-local api = bevy_rust_api
-
--- print("furst cube")
--- api.spawn_cube(.0, 0, .0)
--- print("second cube")
--- api.spawn_cube(1, 0, 1)
--- print("third cube")
--- api.spawn_cube(2, 0, 2)
-
--- luau_advanced/startup.luau
-
 local p = Part.new()
-p.Position = Vector3.new(0, 2, 0)
-p.Color    = Color3.new(1, 0.2, 0.2)
+p.Position = Vector3.new(0, 0, 0)
+p.Color = Color3.new(1, 0.2, 0.2)
 
-task.wait(2000)
-
-p.Color = Color3.new(0.2, 1, 0.2)
+local p2 = Part.new()
+p2.Position = Vector3.new(0, 3, 0)
+p2.Size = Vector3.new(1, 2, 1)
+p2.Color = Color3.new(0.5, 0.5, 1)
 
 task.wait(1)
+p2:Destroy()
 
--- p:Destroy()
+local forward = true
+while true do
+    task.wait(1/60)
+    if forward then
+        for i = 1, 100 do
+            task.wait(1/60)
+            p.Position = Vector3.new(0, 0, i * 0.05)
+            p.Color = Color3.new(1 - i / 100, 0.2, 0.2)
+        end
+    else
+        for i = 100, 1, -1 do
+            task.wait(1/60)
+            p.Position = Vector3.new(0, 0, i * 0.05)
+            p.Color = Color3.new(1 - i / 100, 0.2, 0.2)
+        end
+    end
+    forward = not forward
+end
